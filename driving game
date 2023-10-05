@@ -1,0 +1,495 @@
+///////////////////////////////////////////////////////////////////////////////////////////////     
+// Cathy Fung
+// This is a c++ program which is a driving game.
+// User use arrow key to avoid the obstacles on the road. 
+// User win if the car did not hit any obstacle. Otherwise, user lose.
+///////////////////////////////////////////////////////////////////////////////////////////////
+#include <cstdlib>
+#include <ctime>
+#include <cmath>
+#include <iostream>
+#include <stdlib.h>
+#include <string>
+
+#include <GL/glew.h>
+#include <GL/freeglut.h>
+
+#define MSEC_PER_FRAME 10
+
+bool pauseMotion = true;
+bool objVisible = true;
+static int carR = 3; // Car radius
+static int obsR = 1; // Obstacle radius
+static int rightObsX = 4; // X coodinates of Obstacle [right hand side]
+static int leftObsX = -4; // X coodinates of Obstacle [left hand side]
+static int obsY = 1; // Y coodinates of Obstacle
+static int carX = 4; // X coodinates of car
+static int carY = 0;// Y coodinates of car
+static int carZ = 1005; // Z coodinates of car
+static float X = -3; // X coodinates of camera
+static float Y = 6; // Y coodinates of camera
+static float Z = -1015; // Z coodinates of camera
+static int scoreCounter = 0; // Score counter
+
+// Function return 10 random number array 
+// Since I want to separate the road to 8 section so the obstacle doesn't repeat each other
+// Random number array for the obstacle[left hand side of the road]
+int* randonumArr()
+{
+	srand(time(NULL));
+	int* arr = new int[10];
+	for (int i = 0; i < 10; i++) {
+		// Random number is in between 0 to 100 and added the next section of the road
+		arr[i] = rand() % 100 + 100 * i;
+	}
+	return arr;
+}
+
+// Random number array for the obstacle[right hand side of the road]
+int* randonumArr1()
+{
+	// Add 250 so that it will create a different random number array
+	srand(time(NULL) + 250);
+	int* arr = new int[10];
+	for (int i = 0; i < 10; i++) {
+		// Random number is in between 0 to 100 and added the next section of the road
+		arr[i] = rand() % 100 + 100 * i;
+	}
+	return arr;
+}
+
+// Global for the random number
+int* ptr = randonumArr();
+int* ptr1 = randonumArr1();
+
+void writeBitmapString(void* font, char* string) {
+	for (char* c = string; *c != '\0'; c++)
+		glutBitmapCharacter(font, *c);
+}
+
+// Drawing the car
+void drawCar() {
+	// The front cube of the car
+	glPushMatrix();
+	glTranslatef(0, 1, -2);
+	glScalef(2, 1, 1);
+	glColor3f(0, 0, 0); glutWireCube(1.5);
+	glColor3f(1, 1, 1); glutSolidCube(1.5);
+	glPopMatrix();
+
+	// The back cube of the car
+	glPushMatrix();
+	glTranslatef(0, 2, 1);
+	glColor3f(1, 1, 1); glutWireCube(4);
+	glColor3f(0, 0, 0); glutSolidCube(4);
+	glPopMatrix();
+
+	// The panda ears of back the car
+	glPushMatrix();
+	glTranslatef(-2, 4, 3);
+	glScalef(0.5, 0.5, 0.5);
+	glColor3f(1, 1, 1); glutSolidSphere(1, 20, 20);
+	glPopMatrix();
+
+	glPushMatrix();
+	glTranslatef(2, 4, 3);
+	glScalef(0.5, 0.5, 0.5);
+	glColor3f(1, 1, 1); glutSolidSphere(1, 20, 20);
+	glPopMatrix();
+
+	// The panda eyes of back the car
+	glPushMatrix();
+	glTranslatef(0.5, 3, 3);
+	glScalef(0.12, 0.15, 0.1);
+	glColor3f(0.5, 0.5, 0.5); glutSolidTorus(1, 2, 10, 20);
+	glPopMatrix();
+
+	glPushMatrix();
+	glTranslatef(-0.5, 3, 3);
+	glScalef(0.12, 0.15, 0.1);
+	glColor3f(0.5, 0.5, 0.5); glutSolidTorus(1, 2, 10, 20);
+	glPopMatrix();
+
+	// The panda nose of the back of the car
+	glPushMatrix();
+	glTranslatef(0, 2, 3);
+	glScalef(0.2, 0.1, 0.1);
+	glColor3f(1, 1, 1); glutSolidSphere(1, 20, 20);
+	glPopMatrix();
+
+}
+
+// Drawing the road
+void drawRoad() {
+	// The starting point of the road
+	glPushMatrix();
+	glColor3f(0, 0, 1);
+	glTranslatef(0, 0, 1005);
+	glScalef(16, 0, 10);
+	glutSolidCube(1);
+	glPopMatrix();
+
+	// The main road
+	glPushMatrix();
+	glColor3f(0, 1, 0);
+	glTranslatef(0, 0, 500);
+	// The width and the length of the road are 16 units and 1000 units
+	glScalef(16, 0, 1000);
+	glutSolidCube(1);
+	glPopMatrix();
+
+	// The right line next to road
+	glPushMatrix();
+	glColor3f(0, 0, 0);
+	glTranslatef(8, 0.1, 500);
+	glScalef(1, 0, 1000);
+	glutSolidCube(1);
+	glPopMatrix();
+
+	// The middle line next to road
+	glPushMatrix();
+	glColor3f(0.5, 0.5, 0.5);
+	glTranslatef(0, 0.1, 500);
+	glScalef(1, 0, 1000);
+	glutSolidCube(1);
+	glPopMatrix();
+
+	// The left line next to road
+	glPushMatrix();
+	glColor3f(0, 0, 0);
+	glTranslatef(-8, 0.1, 500);
+	glScalef(1, 0, 1000);
+	glutSolidCube(1);
+	glPopMatrix();
+
+	// The blackground
+	glPushMatrix();
+	glColor3f(1, 1, 0);
+	glTranslatef(0, -0.1, 505);
+	glScalef(250, 0, 1010);
+	glutSolidCube(1);
+	glPopMatrix();
+
+}
+
+// Drawing the obstacles by taking the x, y, and z coordinates
+void drawObstacle(float x, float y, float z) {
+	glPushMatrix();
+	glTranslatef(x, y, z);
+	glColor3f(0, 0, 0); glutWireCube(2);
+	glColor3f(0.5, 0.5, 0.5); glutSolidCube(2);
+	glPopMatrix();
+}
+
+// Check the collision by distance method
+bool checkCollision(int carR, int obsR, int carX, int carY, int carZ, int obsX, int obsY, int obsZ) {
+	float distSq = ((carX - obsX) * (carX - obsX)) + ((carY - obsY) * (carY - obsY)) + ((carZ - obsZ) * (carZ - obsZ));
+	if ((carR + obsR) > distSq)
+		return true;
+	else
+		return false;
+}
+
+void drawScene(void) {
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+
+	glViewport(0, 0, 500, 500);
+	glClearColor(1.0, 1.0, 1.0, 0.0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glLoadIdentity();
+
+	// Set the camera angle, X+4 mean it start at the right hand side of the road
+	gluLookAt((X + 4), Y, -Z, carX, 10, Z, 0, 1, 0);
+
+	glPushMatrix();
+	drawRoad();
+	glPopMatrix();
+
+	glPushMatrix();
+	glTranslatef(carX, carY, carZ);
+	drawCar();
+	glPopMatrix();
+
+	glPushMatrix();
+		// Drawing ramdon Obstacle on the left hand side of the road
+		for (int i = 0; i < 10; i++) {
+			if (objVisible) {
+				drawObstacle(leftObsX, obsY, ptr[i]);
+			}
+			// Score add 1 if not it did not collide 
+			if (checkCollision(carR, obsR, carX, carY, carZ, leftObsX, obsY, ptr[i]) == false) {
+				if ((1005 - carZ) == ptr[i]) {
+					scoreCounter += 1;
+				}
+			}
+			if (checkCollision(carR, obsR, carX, carY, carZ, leftObsX, obsY, ptr[i]) == true) {
+				pauseMotion = true;
+				objVisible = false;
+
+				// Pop up screen for losing
+				glViewport(125, 125, 250, 250);
+				glScissor(125, 125, 250, 250);
+				glEnable(GL_SCISSOR_TEST);
+				glClearColor(1.0, 0.0, 0.0, 0.0);
+				glClear(GL_COLOR_BUFFER_BIT);
+				glDisable(GL_SCISSOR_TEST);
+
+				glMatrixMode(GL_PROJECTION);
+				glPushMatrix();
+				glLoadIdentity();
+				glOrtho(-20, 20, -10, 10, -1, 5);
+				glMatrixMode(GL_MODELVIEW);
+				glLoadIdentity();
+
+				// Print out message 
+				glColor3f(1, 1, 1); glRasterPos3f(-15, 0, 0);
+				writeBitmapString(GLUT_BITMAP_HELVETICA_18, "You lose!");
+				glRasterPos3f(-15, -2, 0);
+				writeBitmapString(GLUT_BITMAP_HELVETICA_18, "Click R to restart!");
+
+				glMatrixMode(GL_PROJECTION);
+				glPopMatrix();
+				glMatrixMode(GL_MODELVIEW);
+			}
+		}
+	glPopMatrix();
+
+	glPushMatrix();
+		// Drawing ramdon Obstacle on the right hand side of the road
+		for (int i = 0; i < 10; i++) {
+			if (objVisible) {
+				drawObstacle(rightObsX, obsY, ptr1[i]);
+			}
+			// Score add 1 if not it did not collide 
+			if (checkCollision(carR, obsR, carX, carY, carZ, leftObsX, obsY, ptr[i]) == false) {
+				if ((1005 - carZ) == ptr1[i]) {
+					scoreCounter += 1;
+				}
+			}
+			if (checkCollision(carR, obsR, carX, carY, carZ, rightObsX, obsY, ptr1[i]) == true) {
+				pauseMotion = true;
+				objVisible = false;
+
+				// Pop up screen for losing
+				glViewport(125, 125, 250, 250);
+				glScissor(125, 125, 250, 250);
+				glEnable(GL_SCISSOR_TEST);
+				glClearColor(1.0, 0.0, 0.0, 0.0);
+				glClear(GL_COLOR_BUFFER_BIT);
+				glDisable(GL_SCISSOR_TEST);
+
+				glMatrixMode(GL_PROJECTION);
+				glPushMatrix();
+				glLoadIdentity();
+				glOrtho(-20, 20, -10, 10, -1, 5);
+
+				glMatrixMode(GL_MODELVIEW);
+				glLoadIdentity();
+
+				// Print out message 
+				glColor3f(1, 1, 1); glRasterPos3f(-15, 0, 0);
+				writeBitmapString(GLUT_BITMAP_HELVETICA_18, "You lose!");
+				glRasterPos3f(-15, -2, 0);
+				writeBitmapString(GLUT_BITMAP_HELVETICA_18, "Click R to restart!");
+
+				glMatrixMode(GL_PROJECTION);
+				glPopMatrix();
+				glMatrixMode(GL_MODELVIEW);
+			}
+		}
+	glPopMatrix();
+
+	glPushMatrix();
+		// Printing out message when you win the game
+		if (carZ == 0) {
+			// Pop up screen for the winning
+			glViewport(125, 125, 250, 250);
+			glScissor(125, 125, 250, 250);
+			glEnable(GL_SCISSOR_TEST);
+			glClearColor(1.0, 0.0, 0.0, 0.0);
+			glClear(GL_COLOR_BUFFER_BIT);
+			glDisable(GL_SCISSOR_TEST);
+
+			glMatrixMode(GL_PROJECTION);
+			glPushMatrix();
+			glLoadIdentity();
+			glOrtho(-20, 20, -10, 10, -1, 5);
+
+			glMatrixMode(GL_MODELVIEW);
+			glLoadIdentity();
+
+			// Print out message 
+			glColor3f(1, 1, 1); glRasterPos3f(-15, 0, 0);
+			writeBitmapString(GLUT_BITMAP_HELVETICA_18, "You win!");
+			glRasterPos3f(-15, -2, 0);
+			writeBitmapString(GLUT_BITMAP_HELVETICA_18, "Click R to restart!");
+
+			glMatrixMode(GL_PROJECTION);
+			glPopMatrix();
+			glMatrixMode(GL_MODELVIEW);
+		}
+	glPopMatrix();
+
+	glPushMatrix();
+		// Screen for the score
+		glViewport(30, 420, 100, 50);
+		glScissor(30, 420, 100, 50);
+		glEnable(GL_SCISSOR_TEST);
+		glClearColor(1.0, 0.0, 0.0, 0.0);
+		glClear(GL_COLOR_BUFFER_BIT);
+		glDisable(GL_SCISSOR_TEST);
+
+		glMatrixMode(GL_PROJECTION);
+		glPushMatrix();
+		glLoadIdentity();
+		glOrtho(-20, 20, -10, 10, -1, 5);
+
+		glMatrixMode(GL_MODELVIEW);
+		glLoadIdentity();
+
+		// Printing out score by using ascii value
+		if (scoreCounter >= 0 && scoreCounter <= 9) {
+			glColor3f(1, 1, 1); glRasterPos3f(-15, 0, 0);
+			glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, 48 + scoreCounter);
+			writeBitmapString(GLUT_BITMAP_HELVETICA_18, " / 20");
+		}
+		else if (scoreCounter >= 20 ) {
+			glColor3f(1, 1, 1); glRasterPos3f(-15, 0, 0);
+			writeBitmapString(GLUT_BITMAP_HELVETICA_18, " 20 / 20");
+		}
+		else
+		{
+			glColor3f(1, 1, 1); glRasterPos3f(-15, 0, 0);
+			writeBitmapString(GLUT_BITMAP_HELVETICA_18, "1");
+			glutBitmapCharacter(GLUT_BITMAP_HELVETICA_18, 48 + (scoreCounter - 10));
+			writeBitmapString(GLUT_BITMAP_HELVETICA_18, " / 20");
+		}
+
+		glMatrixMode(GL_PROJECTION);
+		glPopMatrix();
+		glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
+
+	glDisable(GL_DEPTH_TEST);
+	glFlush();
+}
+
+// Keyboard input processing routine.
+void keyInput(unsigned char key, int x, int y)
+{
+	switch (key)
+	{
+	case 'a':
+		X -= 1;
+		break;
+	case 'd':
+		X += 1;
+		break;
+	case 'w':
+		Y += 1;
+		break;
+	case 's':
+		Y -= 1;
+		break;
+	case ' ':
+		if (pauseMotion) {
+			pauseMotion = false;
+			objVisible = true;
+		}
+		else {
+			pauseMotion = true;
+			objVisible = false;
+		}
+		break;
+	case 'r':
+		carZ = 1005;
+		Z = -1015;
+		scoreCounter = 0;
+		pauseMotion = true;
+		objVisible = true;
+		break;
+	case 27:
+		exit(0);
+		break;
+	default:
+		break;
+	}
+	glutPostRedisplay();
+}
+
+void specialKeys(int key, int x, int y)
+{
+	if (key == GLUT_KEY_RIGHT) {
+		if (carX >= 4)
+			carX = 4;
+		else
+			carX += 8;
+	}
+	else if (key == GLUT_KEY_LEFT) {
+		if (carX <= -4)
+			carX = -4;
+		else
+			carX -= 8;
+	}
+	glutPostRedisplay();
+
+}
+
+//Timer function is called in every MSEC_PER_FRAME milliseconds
+void timerFunc(int value) {
+
+	if (!pauseMotion) {
+		carZ -= 1;
+		Z += 1;
+		if (carZ == 0) {
+			pauseMotion = true;
+		}
+	}
+
+	glutPostRedisplay();
+	glutTimerFunc(MSEC_PER_FRAME, timerFunc, value);
+}
+
+// Initialization routine.
+void setup(void) {
+	glClearColor(1.0, 1.0, 1.0, 0.0);
+}
+
+// OpenGL window reshape routine.
+void resize(int w, int h) {
+	glViewport(0, 0, w, h);
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	gluPerspective(90, w / h, 5, 150);
+	glMatrixMode(GL_MODELVIEW);
+}
+
+// Main routine.
+int main(int argc, char** argv) {
+	srand(time(0));
+
+	glutInit(&argc, argv);
+
+	glutInitContextVersion(4, 3);
+	glutInitContextProfile(GLUT_COMPATIBILITY_PROFILE);
+
+	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA | GLUT_DEPTH);
+	glutInitWindowSize(500, 500);
+	glutInitWindowPosition(100, 100);
+	glutCreateWindow("CSCI4550_HW4_CathyFung");
+	glutDisplayFunc(drawScene);
+	glutSpecialFunc(specialKeys);
+	glutReshapeFunc(resize);
+	glutKeyboardFunc(keyInput);
+
+	glutTimerFunc(MSEC_PER_FRAME, timerFunc, 1);
+
+	glewExperimental = GL_TRUE;
+	glewInit();
+
+	setup();
+
+	glutMainLoop();
+}
