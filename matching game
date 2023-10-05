@@ -1,0 +1,630 @@
+///////////////////////////////////////////////////////////////////////////////////////////////     
+// Cathy Fung
+// This is a c++ program whcih is a matching game.
+// User will select one of the shape (triangle, star, diamond, cross), the arrow will randomly point to one of the shape.
+// User win if the arrow point to the shape that is selected, otherwise user lose.
+// Extra Feature 'r' : all four shape abject will translated counter-clockwise
+///////////////////////////////////////////////////////////////////////////////////////////////
+
+#include <cstdlib>
+#include <cmath>
+#include <time.h> 
+#include <iostream>
+
+#include <GL/glew.h>
+#include <GL/freeglut.h> 
+
+#define PI 3.14159265
+#define N 40.0 // Number of vertices on the boundary of the disc.
+#define MSEC_PER_FRAME 30
+
+// Setting globals.
+static int isWire = 0; // Is wireframe?
+static long font = (long)GLUT_BITMAP_8_BY_13; // Font selection.
+static float angle = 0.0; // Angle of rotation.
+static float ring_color[3] = { 0.4, 0.4, 0.4 }; // Color of the ring.
+static float triangle_color[3] = { 0.0, 0.0, 1.0 }; // Color of the triangle.
+static float star_color[3] = { 0.2, 0.8, 0.3 }; // Color of the star.
+static float diamond_color[3] = { 1.0, 1.0, 0.0 }; // Color of the diamond.
+static float cross_color[3] = { 1.0, 0.0, 0.0 }; // Color of the cross.
+static float arrow_color[3] = { 0.65, 0.30, 0.15 }; // Color of the arrow.
+static float black_color[3] = { 0.0, 0.0, 0.0 }; // Color of the arrow.
+
+int counter = 0;
+int arrowCounter = 0;
+int initStart = 0;
+int randomNum;
+int triangleId = 0;
+int crossId = 1;
+int diamondId = 2;
+int starId = 3;
+int selectedId;
+float rotZ = 0;
+float radius = 6.0 * 5.0;
+bool pauseMotion = true;
+bool pressTriangle = false;
+bool pressCross = false;
+bool pressDiamond = false;
+bool pressStar = false;
+
+// Routine to draw a bitmap character string.
+void writeBitmapString(void* font, char* string)
+{
+	char* c;
+
+	for (c = string; *c != '\0'; c++) glutBitmapCharacter(font, *c);
+}
+
+// Function to draw two ring with center at (X, Y, Z), radius R(the inner circle), parallel to the xy-plane.
+void DrawRing(float R, float X, float Y, float Z) {
+	float angle;
+	int i;
+	if (isWire) glPolygonMode(GL_FRONT, GL_LINE); else glPolygonMode(GL_FRONT, GL_FILL);
+	glBegin(GL_TRIANGLE_STRIP);
+
+	for (i = 0; i <= N; ++i)
+	{
+		angle = 2 * PI * i / N;
+		//drawing the inner circle
+		glVertex3f(X + cos(angle) * R, Y + sin(angle) * R, Z);
+		//drawing the outer circle which the different of radius is 4
+		glVertex3f(X + cos(angle) * (R + 4.0), Y + sin(angle) * (R + 4.0), Z);
+	}
+	glEnd();
+}
+
+// Function to draw a triangle with center at (X, Y, Z)
+void DrawTriangle(float X, float Y, float Z) {
+	glBegin(GL_TRIANGLES);
+	glVertex3f((X - 6.0), (Y - 6.0), Z);
+	glVertex3f((X + 6.0), (Y - 6.0), Z);
+	glVertex3f(X, (Y + 6.0), Z);
+	glEnd();
+}
+
+// Function to draw a star with center at (X, Y, Z)
+void DrawStar(float X, float Y, float Z) {
+
+	glBegin(GL_TRIANGLE_FAN);
+	glVertex3f(X, Y, Z);
+	glVertex3f(X, (Y + 6.0), Z);
+	glVertex3f((X - 4.0), (Y - 6.0), Z);
+	glVertex3f((X + 6.0), (Y + 2.0), Z);
+	glVertex3f((X - 6.0), (Y + 2.0), Z);
+	glVertex3f((X + 4.0), (Y - 6.0), Z);
+	glVertex3f(X, (Y + 6.0), Z);
+
+	glEnd();
+}
+
+// Function to draw a diamond with center at (X, Y, Z)
+void DrawDiamond(float X, float Y, float Z) {
+	glBegin(GL_POLYGON);
+	glVertex3f(X, (Y + 6.0), 0.0);
+	glVertex3f((X - 6.0), Y, 0.0);
+	glVertex3f(X, (Y - 6.0), 0.0);
+	glVertex3f((X + 6.0), Y, 0.0);
+	glEnd();
+}
+
+// Function to draw a cross with center at (X, Y)
+void DrawCross(float X, float Y) {
+	//Create a cross by two rectangle
+	glRectf((X - 2.0), (Y - 6.0), (X + 2.0), (Y + 6.0));
+	glRectf((X - 6.0), (Y - 2.0), (X + 6.0), (Y + 2.0));
+}
+
+// Function to draw a arrow with center at (X, Y, Z)
+void DrawArrow(float X, float Y, float Z) {
+	//Create a cross by a rectangle and a triangle
+	glBegin(GL_TRIANGLES);
+	glVertex3f((X - 6.0), (Y + 12.0), Z);
+	glVertex3f((X + 6.0), (Y + 12.0), Z);
+	glVertex3f(X, (Y + 18.0), Z);
+	glEnd();
+	glRectf((X - 2.0), (Y - 18.0), (X + 2.0), (Y + 12.0));
+}
+
+
+// Drawing routine.
+void drawScene(void)
+{
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	glColor3fv(ring_color);
+	DrawRing(38.0, 0.0, 0.0, 0.0);
+
+	glEnable(GL_DEPTH_TEST); // Enable depth testing
+
+	// Extra Feature 'r' : all four shape abject will translated counter-clockwise
+	glLoadIdentity();
+	glPushMatrix();
+	// Objects rotote in +z direction(counter-clockwise)
+	glRotatef(angle, 0.0, 0.0, 1);
+
+	// Draw triangle
+	glColor3fv(triangle_color);
+	DrawTriangle(0.0, 28.0, 0.0);
+	// When user selected the triangle
+	if (pressTriangle == true)
+	{
+		glPushMatrix();
+		// Draw an other black triangle behind the original triangle
+		glColor3fv(black_color);
+		glLoadIdentity();
+		// Scale the new triangle with +x , +y so that it will bigger than the original triangle
+		// Scale the new triangle with -z so that it will draw behind the original triangle
+		glScalef(1.25, 1.25, -0.1);
+		DrawTriangle(0.0, 23.0, 0.0);
+		glPopMatrix();
+
+		glColor3f(0.0, 0.0, 0.0);
+		glRasterPos3f(-40.0, -44.0, 0.0);
+		writeBitmapString((void*)font, "Blue triangle is selected. Press \"SPACE\" to spin!");
+		//selectedId = triangleId;
+	}
+
+	// Draw cross
+	glColor3fv(cross_color);
+	DrawCross(28.0, 0.0);
+	// When user selected the cross
+	if (pressCross == true)
+	{
+		glPushMatrix();
+		// Draw an other black cross behind the original corss
+		glColor3fv(black_color);
+		glLoadIdentity();
+		// Scale the new cross with +x , +y so that it will bigger than the original cross
+		// Scale the new cross with -z so that it will draw behind the original cross
+		glScalef(1.2, 1.2, -0.1);
+		DrawCross(23.3, 0.0);
+		glPopMatrix();
+
+		glColor3f(0.0, 0.0, 0.0);
+		glRasterPos3f(-36.0, -44.0, 0.0);
+		writeBitmapString((void*)font, "Red Cross is selected. Press \"SPACE\" to spin!");
+		//selectedId = crossId;
+
+	}
+
+	// Draw diamond
+	glColor3fv(diamond_color);
+	DrawDiamond(0.0, -28.0, 0.0);
+	// When user selected the diamond
+	if (pressDiamond == true)
+	{
+		glPushMatrix();
+		// Draw an other black diamond behind the original diamond
+		glColor3fv(black_color);
+		glLoadIdentity();
+		// Scale the new diamond with +x , +y so that it will bigger than the original diamond
+		// Scale the new diamond with -z so that it will draw behind the original diamond
+		glScalef(1.25, 1.25, -0.1);
+		DrawDiamond(0.0, -22.4, 0.0);
+		glPopMatrix();
+
+		glColor3f(0.0, 0.0, 0.0);
+		glRasterPos3f(-40.0, -44.0, 0.0);
+		writeBitmapString((void*)font, "Yellow diamond is selected. Press \"SPACE\" to spin!");
+		//selectedId = diamondId;
+	}
+
+	// Draw star
+	glColor3fv(star_color);
+	// When user selected the star
+	DrawStar(-28.0, 0.0, 0.0);
+	if (pressStar == true)
+	{
+		glPushMatrix();
+		// Draw an other black star behind the original star
+		glColor3fv(black_color);
+		glLoadIdentity();
+		// Scale the new star with +x , +y so that it will bigger than the original star
+		// Scale the new star with -z so that it will draw behind the original star
+		glScalef(1.35, 1.35, -0.1);
+		DrawStar(-20.8, 0.0, 0.0);
+		glPopMatrix();
+
+		glColor3f(0.0, 0.0, 0.0);
+		glRasterPos3f(-38.0, -44.0, 0.0);
+		writeBitmapString((void*)font, "Green star is selected. Press \"SPACE\" to spin!");
+		//selectedId = starId;
+	}
+
+	glPopMatrix();
+	glDisable(GL_DEPTH_TEST); // Disable depth testing.
+
+	if (pressTriangle == true || pressCross == true || pressDiamond == true || pressStar == true) {
+		if (pauseMotion == true) {
+			if (selectedId == arrowCounter) {
+				glColor3f(0.0, 0.0, 0.0);
+				glRasterPos3f(-40.0, -47.0, 0.0);
+				writeBitmapString((void*)font, "You win!");
+			}
+			else {
+				glColor3f(0.0, 0.0, 0.0);
+				glRasterPos3f(-40.0, -47.0, 0.0);
+				writeBitmapString((void*)font, "You lose!");
+			}
+		}
+	}
+
+	// Arrow spinning
+	glLoadIdentity();
+	glColor3fv(arrow_color);
+	glPushMatrix();
+	glRotatef(rotZ, 0.0, 0.0, -1);
+	DrawArrow(0.0, 0.0, 0.0);
+	glPopMatrix();
+
+	glFlush();
+	glutSwapBuffers();
+}
+
+// A boolean function determine if the mouse location is in the four sharpe by using distance method
+bool detectFunc(int mouseX, int mouseY, int centerX, int centerY, int radius) {
+	// Get the distance between the mouse and the center of the shape
+	float distance = sqrt((centerX - mouseX) * (centerX - mouseX) + (centerY - mouseY) * (centerY - mouseY));
+	if (distance <= radius) return true;
+	else return false;
+}
+
+// Function return a random number between 3 to 15
+int randonNum(void) {
+	srand(time(NULL));
+	int rNum = rand() % 12 + 3;
+	return rNum;
+}
+
+void timerFunc(int value) {
+	if (pressTriangle == true || pressCross == true || pressDiamond == true || pressStar == true) {
+		if (!pauseMotion) {
+			// Angle increse 5 degree every times
+			rotZ += 5.0;
+			if (rotZ > 360) rotZ = 0;
+			// Increase the counter if the angle pass the 0, 90, 180, 270, 360 angle
+			if (rotZ == 0 || rotZ == 90 || rotZ == 180 || rotZ == 270) {
+				counter++;
+				arrowCounter ++;
+				if (arrowCounter >= 4) arrowCounter = 0;
+				// If the counter is equal the random number, it stop and reset the counter
+				if (randomNum == counter) {
+					pauseMotion = true;
+					counter = 0;
+				}
+				if (counter == 15) {
+					pauseMotion = true;
+					counter = 0;
+				}
+			}
+		}
+	}
+	else { pauseMotion = true; }
+
+	glutPostRedisplay();
+	glutTimerFunc(MSEC_PER_FRAME, timerFunc, value);
+}
+
+// OpenGL window reshape routine.
+void resize(int w, int h)
+{
+	glViewport(0, 0, w, h);
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+	glOrtho(-50.0, 50.0, -50.0, 50.0, -1.0, 1.0);
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+// Keyboard input processing routine.
+void keyInput(unsigned char key, int x, int y) {
+	switch (key)
+	{
+	case 27:
+		exit(0);
+		break;
+	case 'r':
+		angle += 90.0;
+		glutPostRedisplay();
+		break;
+	case ' ':
+		if (pauseMotion)
+		{
+			pauseMotion = false;
+		}
+		else
+		{
+			pauseMotion = true;
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+void triangle_color_menu(int id)
+{
+	//purple
+	if (id == 1)
+	{
+		triangle_color[0] = 0.75;
+		triangle_color[1] = 0.0;
+		triangle_color[2] = 1.0;
+	}
+	//orange
+	if (id == 2)
+	{
+		triangle_color[0] = 1.0;
+		triangle_color[1] = 0.35;
+		triangle_color[2] = 0.0;
+	}
+	//cyan
+	if (id == 3)
+	{
+		triangle_color[0] = 0.0;
+		triangle_color[1] = 1.0;
+		triangle_color[2] = 1.0;
+	}
+	//pink
+	if (id == 4)
+	{
+		triangle_color[0] = 1.0;
+		triangle_color[1] = 0.35;
+		triangle_color[2] = 0.8;
+	}
+	glutPostRedisplay();
+}
+
+void star_color_menu(int id)
+{
+	//purple
+	if (id == 1)
+	{
+		star_color[0] = 0.75;
+		star_color[1] = 0.0;
+		star_color[2] = 1.0;
+	}
+	//orange
+	if (id == 2)
+	{
+		star_color[0] = 1.0;
+		star_color[1] = 0.35;
+		star_color[2] = 0.0;
+	}
+	//cyan
+	if (id == 3)
+	{
+		star_color[0] = 0.0;
+		star_color[1] = 1.0;
+		star_color[2] = 1.0;
+	}
+	//pink
+	if (id == 4)
+	{
+		star_color[0] = 1.0;
+		star_color[1] = 0.35;
+		star_color[2] = 0.8;
+	}
+	glutPostRedisplay();
+}
+
+void diamond_color_menu(int id)
+{
+	//purple
+	if (id == 1)
+	{
+		diamond_color[0] = 0.75;
+		diamond_color[1] = 0.0;
+		diamond_color[2] = 1.0;
+	}
+	//orange
+	if (id == 2)
+	{
+		diamond_color[0] = 1.0;
+		diamond_color[1] = 0.35;
+		diamond_color[2] = 0.0;
+	}
+	//cyan
+	if (id == 3)
+	{
+		diamond_color[0] = 0.0;
+		diamond_color[1] = 1.0;
+		diamond_color[2] = 1.0;
+	}
+	//pink
+	if (id == 4)
+	{
+		diamond_color[0] = 1.0;
+		diamond_color[1] = 0.35;
+		diamond_color[2] = 0.8;
+	}
+	glutPostRedisplay();
+}
+
+void cross_color_menu(int id)
+{
+	//purple
+	if (id == 1)
+	{
+		cross_color[0] = 0.75;
+		cross_color[1] = 0.0;
+		cross_color[2] = 1.0;
+	}
+	//orange
+	if (id == 2)
+	{
+		cross_color[0] = 1.0;
+		cross_color[1] = 0.35;
+		cross_color[2] = 0.0;
+	}
+	//cyan
+	if (id == 3)
+	{
+		cross_color[0] = 0.0;
+		cross_color[1] = 1.0;
+		cross_color[2] = 1.0;
+	}
+	//pink
+	if (id == 4)
+	{
+		cross_color[0] = 1.0;
+		cross_color[1] = 0.35;
+		cross_color[2] = 0.8;
+	}
+	glutPostRedisplay();
+}
+
+void makeTriangleMenu()
+{
+	glutCreateMenu(triangle_color_menu);
+	glutAddMenuEntry("Pink", 4);
+	glutAddMenuEntry("Cyan", 3);
+	glutAddMenuEntry("Orange", 2);
+	glutAddMenuEntry("Purple", 1);
+
+	// The menu is attached to a mouse button.
+	glutAttachMenu(GLUT_RIGHT_BUTTON);
+}
+
+void makeStarMenu()
+{
+	glutCreateMenu(star_color_menu);
+	glutAddMenuEntry("Pink", 4);
+	glutAddMenuEntry("Cyan", 3);
+	glutAddMenuEntry("Orange", 2);
+	glutAddMenuEntry("Purple", 1);
+
+	// The menu is attached to a mouse button.
+	glutAttachMenu(GLUT_RIGHT_BUTTON);
+}
+
+void makeDiamondMenu()
+{
+	glutCreateMenu(diamond_color_menu);
+	glutAddMenuEntry("Pink", 4);
+	glutAddMenuEntry("Cyan", 3);
+	glutAddMenuEntry("Orange", 2);
+	glutAddMenuEntry("Purple", 1);
+
+	// The menu is attached to a mouse button.
+	glutAttachMenu(GLUT_RIGHT_BUTTON);
+}
+
+void makeCrossMenu()
+{
+	glutCreateMenu(cross_color_menu);
+	glutAddMenuEntry("Pink", 4);
+	glutAddMenuEntry("Cyan", 3);
+	glutAddMenuEntry("Orange", 2);
+	glutAddMenuEntry("Purple", 1);
+
+	// The menu is attached to a mouse button.
+	glutAttachMenu(GLUT_RIGHT_BUTTON);
+}
+
+void mouseClick(int button, int state, int x, int y)
+{
+	if (button == GLUT_LEFT_BUTTON && state == GLUT_DOWN) {
+		randomNum = randonNum();
+		std::cout << randomNum;
+		// detection for triangle
+		if (detectFunc(x, y, 50 * 5, 22 * 5, radius) == true) {
+			pressTriangle = true;
+			pressCross = false;
+			pressDiamond = false;
+			pressStar = false;
+			selectedId = triangleId;
+		}
+		// detection for cross
+		else if (detectFunc(x, y, 78 * 5, 50 * 5, radius) == true) {
+			pressCross = true;
+			pressTriangle = false;
+			pressDiamond = false;
+			pressStar = false;
+			selectedId = crossId;
+		}
+		// detection for diamond
+		else if (detectFunc(x, y, 50 * 5, 78 * 5, radius) == true) {
+			pressDiamond = true;
+			pressTriangle = false;
+			pressCross = false;
+			pressStar = false;
+			selectedId = diamondId;
+		}
+		// detection for star
+		else if (detectFunc(x, y, 22 * 5, 50 * 5, radius) == true) {
+			pressStar = true;
+			pressTriangle = false;
+			pressCross = false;
+			pressDiamond = false;
+			selectedId = starId;
+		}
+		else {
+			pressTriangle = false;
+			pressCross = false;
+			pressDiamond = false;
+			pressStar = false;
+		}
+		glutPostRedisplay();
+	}
+
+	if (button == GLUT_RIGHT_BUTTON && state == GLUT_DOWN) {
+		if (detectFunc(x, y, 50 * 5, 22 * 5, radius) == true) { makeTriangleMenu(); }
+		if (detectFunc(x, y, 22 * 5, 50 * 5, radius) == true) { makeStarMenu(); }
+		if (detectFunc(x, y, 50 * 5, 78 * 5, radius) == true) { makeDiamondMenu(); }
+		if (detectFunc(x, y, 78 * 5, 50 * 5, radius) == true) { makeCrossMenu(); }
+	}
+
+}
+
+/*
+void mouse(int btn, int state, int x, int y) {
+	float mx = x;
+	float my = y;
+	int ox = (mx / 500 - 1.0);
+	int oy = -(my / 500 - 1.0);
+	switch (btn) {
+	case GLUT_LEFT_BUTTON:
+		if (state == GLUT_DOWN) {
+			printf("%f\n", mx);
+			printf("%f\n", my);
+		}
+		break;
+	}
+};
+*/
+
+// Initialization routine.
+void setup(void)
+{
+	glClearColor(1.0, 1.0, 1.0, 0.0);
+}
+
+// Main routine.
+int main(int argc, char** argv)
+{
+	glutInit(&argc, argv);
+
+	glutInitContextVersion(4, 3);
+	glutInitContextProfile(GLUT_COMPATIBILITY_PROFILE);
+
+	glutInitDisplayMode(GLUT_SINGLE | GLUT_RGBA | GLUT_DEPTH);
+	glutInitWindowSize(500, 500);
+	glutInitWindowPosition(100, 100);
+	glutCreateWindow("CSCI4550_HW3.cpp");
+	glutDisplayFunc(drawScene);
+	glutReshapeFunc(resize);
+	glutKeyboardFunc(keyInput);
+
+	glutTimerFunc(MSEC_PER_FRAME, timerFunc, 1);
+	// Register the mouse callback function. 
+	glutMouseFunc(mouseClick);
+	//glutMouseFunc(mouse);
+
+	glewExperimental = GL_TRUE;
+	glewInit();
+
+	setup();
+
+	glutMainLoop();
+}
